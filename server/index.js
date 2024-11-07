@@ -6,6 +6,15 @@ const axios = require('axios');
 
 const app = express();
 
+// Add CSP headers middleware
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self' https://api.idrisiyyah.or.id:3000 https://vercel.live; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline'; img-src 'self' https://api.idrisiyyah.or.id:3000 data: blob: https:; font-src 'self' data:;"
+  );
+  next();
+});
+
 // Serve static files
 app.use(express.static(path.join(__dirname, '../build')));
 
@@ -19,46 +28,41 @@ const generateSlug = (title) => {
     .replace(/-+/g, '-');
 };
 
-// Handle article detail routes
+// Handle article routes
 const handleArticle = async (req, res) => {
   try {
     const indexPath = path.join(__dirname, '../build/index.html');
+    
+    // Read the index.html file first
+    const htmlData = await fs.promises.readFile(indexPath, 'utf8');
+    
     const { id } = req.params;
     
     // If no ID, just send the index.html
     if (!id) {
-      return res.sendFile(indexPath);
-    }
-    
-    // Fetch article data
-    const response = await axios.get(`${process.env.REACT_APP_BASE_URL}/artikel/kajian`);
-    const articles = response.data;
-    
-    // Find matching article
-    const article = articles.find(item => item._id === id);
-    
-    if (!article) {
-      return res.sendFile(indexPath);
+      return res.send(htmlData);
     }
 
-    // Read the index.html file
-    fs.readFile(indexPath, 'utf8', (err, data) => {
-      if (err) {
-        console.error('Error reading index.html:', err);
-        return res.sendFile(indexPath);
+    try {
+      // Fetch article data
+      const response = await axios.get(`${process.env.REACT_APP_BASE_URL}/artikel/kajian`);
+      const article = response.data.find(item => item._id === id);
+
+      if (!article) {
+        return res.send(htmlData);
       }
 
-      // Get the image URL
+      // Get the image URL and article URL
       const imageUrl = `${process.env.REACT_APP_BASE_URL}/getimage/${article.gambar}`;
       const articleUrl = `${process.env.REACT_APP_FRONTEND_URL}/${id}/${generateSlug(article.judul_artikel)}`;
       
-      // Strip HTML tags from description
+      // Clean description
       const cleanDescription = article.deskripsi
         .replace(/<[^>]*>/g, '')
         .slice(0, 160) + '...';
 
-      // Replace meta tags
-      const updatedHTML = data
+      // Update meta tags
+      const updatedHTML = htmlData
         .replace('<title>React App</title>', `<title>${article.judul_artikel}</title>`)
         .replace('content="Web site created using create-react-app"',
                 `content="${cleanDescription}"`)
@@ -80,21 +84,25 @@ const handleArticle = async (req, res) => {
                 `<meta name="twitter:image" content="${imageUrl}">`);
 
       res.send(updatedHTML);
-    });
+    } catch (error) {
+      console.error('Error fetching article:', error);
+      res.send(htmlData);
+    }
   } catch (error) {
-    console.error('Error handling article route:', error);
-    res.sendFile(path.join(__dirname, '../build/index.html'));
+    console.error('Error reading index.html:', error);
+    res.status(500).send('Internal Server Error');
   }
 };
 
 // Define routes
-app.get('/:id/:slug', handleArticle);
-app.get('/:id', handleArticle);
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../build/index.html'));
 });
 
-// Handle all other routes - Important for client-side routing
+app.get('/:id/:slug', handleArticle);
+app.get('/:id', handleArticle);
+
+// Handle all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../build/index.html'));
 });
@@ -107,5 +115,4 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Export the Express API
 module.exports = app;
