@@ -2,27 +2,20 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import parse from "html-react-parser";
-
-
+import { Helmet } from "react-helmet"; // Tambahkan import untuk Helmet
 
 const DetailHalaman = () => {
-  const { id } = useParams(); // Mengambil ID artikel dari URL
-  const [artikel, setArtikel] = useState(null); // Menyimpan data artikel
-  const [loading, setLoading] = useState(true); // State untuk menampilkan loading
+  const { id } = useParams();
+  const [artikel, setArtikel] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const baseUrl = process.env.REACT_APP_BASE_URL;
 
   useEffect(() => {
     const fetchArtikel = async () => {
       try {
-        const baseUrl = process.env.REACT_APP_BASE_URL;
         const response = await axios.get(`${baseUrl}/artikel/kajian`);
-
-        
-        setArtikel(response.data.find((ele, index)=> {
-            return ele._id === id
-        })); 
-
-        console.log(artikel.judul_artikel)
-
+        const foundArtikel = response.data.find((ele) => ele._id === id);
+        setArtikel(foundArtikel);
         setLoading(false);
       } catch (error) {
         console.error(`Error fetching article: ${error.message}`);
@@ -31,7 +24,7 @@ const DetailHalaman = () => {
     };
 
     fetchArtikel();
-  }, [id]);
+  }, [id, baseUrl]);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -41,33 +34,63 @@ const DetailHalaman = () => {
     return <div>Artikel tidak ditemukan.</div>;
   }
 
+  // Buat clean description untuk meta tags
+  const cleanDescription =
+    artikel.deskripsi.replace(/<[^>]*>/g, "").slice(0, 160) + "...";
+
   return (
-    <main className="container mx-auto p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Gambar Artikel */}
-        {artikel.gambar && (
-          <img
-            src={`https://api.idrisiyyah.or.id:3000/getimage/${artikel.gambar}`}
-            alt={artikel.judul_artikel}
-            className="w-full h-64 object-cover rounded-lg mb-4"
-          />
-        )}
+    <>
+      <Helmet>
+        {/* Basic meta tags */}
+        <title>{artikel.judul_artikel}</title>
+        <meta name="description" content={cleanDescription} />
 
-        {/* Judul Artikel */}
-        <h1 className="text-3xl font-bold mb-2">{artikel.judul_artikel}</h1>
+        {/* Open Graph meta tags */}
+        <meta property="og:title" content={artikel.judul_artikel} />
+        <meta property="og:description" content={cleanDescription} />
+        <meta property="og:type" content="article" />
+        <meta
+          property="og:image"
+          content={`${baseUrl}/getimage/${artikel.gambar}`}
+        />
+        <meta property="og:url" content={window.location.href} />
 
-        {/* Narasumber */}
-        {artikel.narasumber && (
-          <p className="text-gray-600 mb-2">
-            Oleh: <span className="font-semibold">{artikel.narasumber}</span>
-          </p>
-        )}
+        {/* Twitter Card meta tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={artikel.judul_artikel} />
+        <meta name="twitter:description" content={cleanDescription} />
+        <meta
+          name="twitter:image"
+          content={`${baseUrl}/getimage/${artikel.gambar}`}
+        />
+      </Helmet>
 
-        <h1 className="text-base font-normal mb-2">
-          {parse(artikel.deskripsi)}
-        </h1>
-      </div>
-    </main>
+      <main className="container mx-auto p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Gambar Artikel */}
+          {artikel.gambar && (
+            <img
+              src={`${baseUrl}/getimage/${artikel.gambar}`}
+              alt={artikel.judul_artikel}
+              className="w-full h-64 object-cover rounded-lg mb-4"
+            />
+          )}
+
+          {/* Judul Artikel */}
+          <h1 className="text-3xl font-bold mb-2">{artikel.judul_artikel}</h1>
+
+          {/* Narasumber */}
+          {artikel.narasumber && (
+            <p className="text-gray-600 mb-2">
+              Oleh: <span className="font-semibold">{artikel.narasumber}</span>
+            </p>
+          )}
+
+          {/* Konten Artikel */}
+          <div className="prose max-w-none">{parse(artikel.deskripsi)}</div>
+        </div>
+      </main>
+    </>
   );
 };
 
