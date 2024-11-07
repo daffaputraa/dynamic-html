@@ -1,220 +1,143 @@
-// // server/index.js
-// const express = require('express');
-// const path = require('path');
-// const fs = require('fs');
-// const axios = require('axios');
-
-// const app = express();
-
-// // Add CSP headers middleware
-// app.use((req, res, next) => {
-//   res.setHeader(
-//     'Content-Security-Policy',
-//     "default-src 'self' https://api.idrisiyyah.or.id:3000 https://vercel.live; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live; style-src 'self' 'unsafe-inline'; img-src 'self' https://api.idrisiyyah.or.id:3000 data: blob: https:; font-src 'self' data:;"
-//   );
-//   next();
-// });
-
-// // Serve static files
-// app.use(express.static(path.join(__dirname, '../build')));
-
-// // Function to generate slug
-// const generateSlug = (title) => {
-//   return title
-//     .toLowerCase()
-//     .replace(/[^\w\s-]/g, '')
-//     .trim()
-//     .replace(/\s+/g, '-')
-//     .replace(/-+/g, '-');
-// };
-
-// // Handle article routes
-// const handleArticle = async (req, res) => {
-//   try {
-//     const indexPath = path.join(__dirname, '../build/index.html');
-    
-//     // Read the index.html file first
-//     const htmlData = await fs.promises.readFile(indexPath, 'utf8');
-    
-//     const { id } = req.params;
-    
-//     // If no ID, just send the index.html
-//     if (!id) {
-//       return res.send(htmlData);
-//     }
-
-//     try {
-//       // Fetch article data
-//       const response = await axios.get(`${process.env.REACT_APP_BASE_URL}/artikel/kajian`);
-//       const article = response.data.find(item => item._id === id);
-
-//       if (!article) {
-//         return res.send(htmlData);
-//       }
-
-//       // Get the image URL and article URL
-//       const imageUrl = `${process.env.REACT_APP_BASE_URL}/getimage/${article.gambar}`;
-//       const articleUrl = `${process.env.REACT_APP_FRONTEND_URL}/${id}/${generateSlug(article.judul_artikel)}`;
-      
-//       // Clean description
-//       const cleanDescription = article.deskripsi
-//         .replace(/<[^>]*>/g, '')
-//         .slice(0, 160) + '...';
-
-//       // Update meta tags
-//       const updatedHTML = htmlData
-//         .replace('<title>React App</title>', `<title>${article.judul_artikel}</title>`)
-//         .replace('content="Web site created using create-react-app"',
-//                 `content="${cleanDescription}"`)
-//         .replace(/<meta property="og:title".*?>/g,
-//                 `<meta property="og:title" content="${article.judul_artikel}">`)
-//         .replace(/<meta property="og:description".*?>/g,
-//                 `<meta property="og:description" content="${cleanDescription}">`)
-//         .replace(/<meta property="og:image".*?>/g,
-//                 `<meta property="og:image" content="${imageUrl}">`)
-//         .replace(/<meta property="og:url".*?>/g,
-//                 `<meta property="og:url" content="${articleUrl}">`)
-//         .replace(/<meta name="twitter:card".*?>/g,
-//                 '<meta name="twitter:card" content="summary_large_image">')
-//         .replace(/<meta name="twitter:title".*?>/g,
-//                 `<meta name="twitter:title" content="${article.judul_artikel}">`)
-//         .replace(/<meta name="twitter:description".*?>/g,
-//                 `<meta name="twitter:description" content="${cleanDescription}">`)
-//         .replace(/<meta name="twitter:image".*?>/g,
-//                 `<meta name="twitter:image" content="${imageUrl}">`);
-
-//       res.send(updatedHTML);
-//     } catch (error) {
-//       console.error('Error fetching article:', error);
-//       res.send(htmlData);
-//     }
-//   } catch (error) {
-//     console.error('Error reading index.html:', error);
-//     res.status(500).send('Internal Server Error');
-//   }
-// };
-
-// // Define routes
-// app.get('/', (req, res) => {
-//   res.sendFile(path.join(__dirname, '../build/index.html'));
-// });
-
-// app.get('/:id/:slug', handleArticle);
-// app.get('/:id', handleArticle);
-
-// // Handle all other routes
-// app.get('*', (req, res) => {
-//   res.sendFile(path.join(__dirname, '../build/index.html'));
-// });
-
-// // For development
-// if (process.env.NODE_ENV !== 'production') {
-//   const PORT = process.env.PORT || 3000;
-//   app.listen(PORT, () => {
-//     console.log(`Server is running on port ${PORT}`);
-//   });
-// }
-
-// module.exports = app;
-
-
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const axios = require('axios');
+require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const axios = require("axios");
+const cors = require("cors");
+const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const API_BASE_URL = process.env.REACT_APP_BASE_URL || "https://api.idrisiyyah.or.id:3000";
 
-// Serve static files from the build folder
-app.use(express.static(path.join(__dirname, '../build')));
+// Enable CORS
+app.use(cors());
 
-// Function to generate slug
+// Create API proxy
+const apiProxy = createProxyMiddleware({
+  target: API_BASE_URL,
+  changeOrigin: true,
+  secure: false,
+  pathRewrite: {
+    "^/api": "",
+  },
+  onProxyRes: function (proxyRes, req, res) {
+    proxyRes.headers["Access-Control-Allow-Origin"] = "*";
+    proxyRes.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+    proxyRes.headers["Access-Control-Allow-Headers"] = "Origin, X-Requested-With, Content-Type, Accept";
+  },
+  onError: function (err, req, res) {
+    console.error("Proxy Error:", err);
+    res.status(500).send("Proxy Error");
+  },
+});
+
+// Use proxy for API requests
+app.use("/api", apiProxy);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, "../build")));
+
+// Generate slug function
 const generateSlug = (title) => {
   return title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
+    ?.toLowerCase()
+    .replace(/[^\w\s-]/g, "")
     .trim()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
 };
 
-// Parse path untuk mendapatkan ID
-const parsePathForId = (path) => {
-  const parts = path.split('/').filter(Boolean);
-  return parts.length >= 1 ? parts[0] : null;
+// Helper to strip HTML and clean text
+const stripHtml = (html) => {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 };
 
-// Handle semua routes
-app.get('/*', async (req, res) => {
+// Enhanced meta tags injection
+const injectMetaTags = (htmlData, article) => {
+  if (!article) return htmlData;
+
+  const imageUrl = `${API_BASE_URL}/getimage/${article.gambar}`;
+  const articleUrl = `${process.env.REACT_APP_FRONTEND_URL}/${article._id}/${generateSlug(article.judul_artikel)}`;
+  const description = stripHtml(article.deskripsi).slice(0, 160) + "...";
+  const title = `${article.judul_artikel} - Portal Kajian Idrisiyyah`;
+
+  const metaTags = {
+    "<title>.*?</title>": `<title>${title}</title>`,
+    '<meta name="description".*?>': `<meta name="description" content="${description}">`,
+    '<meta property="og:title".*?>': `<meta property="og:title" content="${title}">`,
+    '<meta property="og:description".*?>': `<meta property="og:description" content="${description}">`,
+    '<meta property="og:image".*?>': `<meta property="og:image" content="${imageUrl}">`,
+    '<meta property="og:url".*?>': `<meta property="og:url" content="${articleUrl}">`,
+    '<meta property="og:type".*?>': '<meta property="og:type" content="article">',
+    '<meta name="twitter:card".*?>': '<meta name="twitter:card" content="summary_large_image">',
+    '<meta name="twitter:title".*?>': `<meta name="twitter:title" content="${title}">`,
+    '<meta name="twitter:description".*?>': `<meta name="twitter:description" content="${description}">`,
+    '<meta name="twitter:image".*?>': `<meta name="twitter:image" content="${imageUrl}">`,
+    '<meta name="twitter:url".*?>': `<meta name="twitter:url" content="${articleUrl}">`,
+    '<link rel="canonical".*?>': `<link rel="canonical" href="${articleUrl}">`,
+  };
+
+  let updatedHtml = htmlData;
+  Object.entries(metaTags).forEach(([pattern, replacement]) => {
+    updatedHtml = updatedHtml.replace(new RegExp(pattern, "i"), replacement);
+  });
+
+  return updatedHtml;
+};
+
+// Handle routes for articles
+app.get("/:id/:slug", async (req, res) => {
   try {
-    const indexPath = path.join(__dirname, '../build/index.html');
-    const htmlData = await fs.promises.readFile(indexPath, 'utf8');
-    
-    const id = parsePathForId(req.path);
-    
-    // Jika di homepage atau tidak ada ID
-    if (!id) {
-      return res.send(htmlData);
+    const { id, slug } = req.params;
+
+    // Fetch article data
+    const response = await axios.get(`${API_BASE_URL}/artikel/kajian`, {
+      timeout: 5000,
+    });
+
+    if (!response.data) {
+      throw new Error("No data received from API");
     }
 
-    try {
-      const response = await axios.get(`${process.env.REACT_APP_BASE_URL}/artikel/kajian`);
-      const article = response.data.find(item => item._id === id);
+    const article = response.data.find((item) => item._id === id);
 
-      if (!article) {
-        return res.send(htmlData);
+    if (!article) {
+      return res.status(404).send("Article not found");
+    }
+
+    // Read and inject meta tags
+    const indexPath = path.resolve(__dirname, "../build/index.html");
+    fs.readFile(indexPath, "utf8", (err, htmlData) => {
+      if (err) {
+        console.error("Error reading index.html:", err);
+        return res.status(500).send("Error reading index.html");
       }
 
-      // Clean description untuk meta tags
-      const cleanDescription = article.deskripsi
-        .replace(/<[^>]*>/g, '')
-        .slice(0, 160)
-        .trim();
-
-      // Generate URLs
-      const imageUrl = `${process.env.REACT_APP_BASE_URL}/getimage/${article.gambar}`;
-      const articleSlug = generateSlug(article.judul_artikel);
-      const articleUrl = `${req.protocol}://${req.get('host')}/${id}/${articleSlug}`;
-
-      // Meta tags sesuai dengan artikel
-      const metaTags = `
-        <title>${article.judul_artikel}</title>
-        <meta name="description" content="${cleanDescription}">
-        <meta property="og:title" content="${article.judul_artikel}">
-        <meta property="og:description" content="${cleanDescription}">
-        <meta property="og:image" content="${imageUrl}">
-        <meta property="og:url" content="${articleUrl}">
-        <meta property="og:type" content="article">
-        <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="${article.judul_artikel}">
-        <meta name="twitter:description" content="${cleanDescription}">
-        <meta name="twitter:image" content="${imageUrl}">
-      `;
-
-      // Replace meta tags di HTML
-      const updatedHTML = htmlData.replace(
-        /<title>.*?<\/title>/,
-        metaTags
-      );
-
-      res.send(updatedHTML);
-
-    } catch (error) {
-      console.error('Error fetching article:', error);
-      res.send(htmlData);
-    }
+      const updatedHtml = injectMetaTags(htmlData, article);
+      res.send(updatedHtml);
+    });
   } catch (error) {
-    console.error('Error reading index.html:', error);
-    res.status(500).send('Internal Server Error');
+    console.error("Error handling article route:", error);
+    res.status(500).send("Server error");
   }
 });
 
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+// Handle all other routes
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../build/index.html"));
+});
 
-module.exports = app;
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Something broke!");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API Base URL: ${API_BASE_URL}`);
+});
