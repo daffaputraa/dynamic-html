@@ -22,7 +22,6 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "vercel-build": "npm run build",
     "build": "react-scripts build",
     "dev": "react-scripts start",
     "test": "react-scripts test",
